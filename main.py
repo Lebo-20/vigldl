@@ -222,6 +222,10 @@ class ViglooBot:
 
         @uploader.client.on(events.NewMessage(pattern='/status'))
         async def status_handler(event):
+            # Convert to int for comparison
+            if event.sender_id != int(ADMIN_ID):
+                return
+            
             status = "Auto Mode: ON" if self.auto_mode else "Auto Mode: OFF"
             if self.lock.locked():
                 status += "\n🔥 Currently processing a drama..."
@@ -229,7 +233,7 @@ class ViglooBot:
 
         @uploader.client.on(events.NewMessage(pattern='/update'))
         async def update_handler(event):
-            if event.sender_id != ADMIN_ID:
+            if event.sender_id != int(ADMIN_ID):
                 return await event.respond("❌ Only Admin can update the bot.")
             
             await event.respond("🔄 **Updating bot...** pulling latest code from GitHub.")
