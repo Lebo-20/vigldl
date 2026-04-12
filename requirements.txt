@@ -1,8 +1,3 @@
 telethon
 httpx
-ffmpeg-python
 python-dotenv
-asyncio
-tqdm
-json
-pathlib
