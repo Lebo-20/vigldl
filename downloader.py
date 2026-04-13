@@ -33,7 +33,7 @@ class Downloader:
             
             # --- STEP 1: DOWNLOAD RAW VIDEO ---
             logger.info(f"Step 1/3: Downloading Raw Video for {dest_path}")
-            if progress_callback: await progress_callback("DOWNLOAD_RAW", 0)
+            if progress_callback: await progress_callback("DOWNLOAD_RAW", 0, 0, 0)
             
             download_success = False
             for attempt in range(self.retry_count):
@@ -99,7 +99,7 @@ class Downloader:
                         line = await proc.stderr.readline()
                         if not line: break
                         if progress_callback and "out_time_ms=" in line.decode():
-                            await progress_callback("DOWNLOAD_RAW", 15)
+                            await progress_callback("DOWNLOAD_RAW", 15, 0, 0)
                     
                     await proc.wait()
                     if proc.returncode == 0 and os.path.exists(raw_path):
@@ -112,7 +112,7 @@ class Downloader:
 
             # --- STEP 2: ASSEMBLE SUBTITLES ---
             logger.info(f"Step 2/3: Assembling Subtitles for {dest_path}")
-            if progress_callback: await progress_callback("FETCH_SUB", 0)
+            if progress_callback: await progress_callback("FETCH_SUB", 0, 0, 0)
             
             has_sub = False
             try:
@@ -153,7 +153,7 @@ class Downloader:
 
             # --- STEP 3: EDIT & HARDSUB ---
             logger.info(f"Step 3/3: Applying Edits & Hardsubbing for {dest_path}")
-            if progress_callback: await progress_callback("BURNING", 0)
+            if progress_callback: await progress_callback("BURNING", 0, 0, 0)
             
             # Duration for progress
             total_duration = 0
@@ -194,7 +194,7 @@ class Downloader:
                             current_sec = time_ms / 1000000
                             if time.time() - last_update > 2:
                                 percent = min(99, (current_sec / total_duration) * 100) if total_duration > 0 else 50
-                                await progress_callback("BURNING", percent)
+                                await progress_callback("BURNING", percent, current_sec, total_duration)
                                 last_update = time.time()
                         except: pass
 

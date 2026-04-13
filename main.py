@@ -140,7 +140,7 @@ class ViglooBot:
                     
                     file_path = os.path.join(temp_dir, f"S{season_num}E{ep_num}.mp4")
                     
-                    async def progress_cb(ep_percent, current_sec, total_sec):
+                    async def progress_cb(label, ep_percent, current_sec=0, total_sec=0):
                         episode_progress[idx] = ep_percent
                         # Update global status occasionally
                         total_percent = sum(episode_progress.values()) / total_eps
