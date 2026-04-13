@@ -29,8 +29,8 @@ class Uploader:
             logger.error(f"Thumbnail generation failed: {e}")
         return None
 
-    async def upload_video(self, chat_id, video_path, caption, topic_id=None):
-        """Upload video to Telegram channel/group/topic"""
+    async def upload_video(self, chat_id, video_path, caption, topic_id=None, progress_callback=None):
+        """Upload video with dynamic progress callback"""
         if not os.path.exists(video_path):
             logger.error(f"Video file not found: {video_path}")
             return None
@@ -46,7 +46,7 @@ class Uploader:
                 thumb=thumb,
                 supports_streaming=True,
                 reply_to=topic_id,
-                progress_callback=self._callback
+                progress_callback=progress_callback
             )
             logger.info(f"Uploaded: {video_path}")
             return message

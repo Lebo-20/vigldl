@@ -28,12 +28,27 @@ LANG = "id"
 DOWNLOAD_DIR = "downloads"
 OUTPUT_DIR = "output"
 MAX_CONCURRENT_DOWNLOADS = 5
-FFMPEG_PRESET = "ultrafast"  # ultrafast, slow
+FFMPEG_PRESET = "ultrafast"  # default ultrafast
 FFMPEG_CRF = 23
+
+# Hardsub Rules
+HARDSUB_MAX_RES = 720
+HARDSUB_PRESET = "ultrafast" # ultrafast for speed
+HARDSUB_CRF = 23 # 20-23
+SUB_FONT = "Standard Symbols PS"
+SUB_FONT_SIZE = 10
+SUB_FONT_BOLD = 1
+SUB_OUTLINE = 1
+SUB_OFFSET = 90
 
 # Automation Config
 AUTO_SCAN_INTERVAL = 15 * 60  # 15 minutes in seconds
 PROCESSED_FILE = "processed.json"
+
+# Watermark Config (Optional)
+WATERMARK_PATH = "logo.png" # Place logo.png in the root or change path
+WATERMARK_SIZE = "100:-1"   # Scale watermark width to 100px
+WATERMARK_OPACITY = 0.7
 
 # Create directories
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
