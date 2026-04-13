@@ -29,8 +29,8 @@ class Downloader:
             raw_path = dest_path + ".raw.mp4"
             srt_path = dest_path.replace(".mp4", ".srt")
             
-            from config import API_REQUEST_DELAY
-
+            from config import API_REQUEST_DELAY, ENABLE_ARIA2
+            
             # --- STEP 1: DOWNLOAD RAW VIDEO ---
             logger.info(f"Step 1/3: Downloading Raw Video for {dest_path}")
             if progress_callback: await progress_callback("DOWNLOAD_RAW", 0)
@@ -39,25 +39,74 @@ class Downloader:
             for attempt in range(self.retry_count):
                 try:
                     await asyncio.sleep(API_REQUEST_DELAY) # Avoid API spam
+                    
+                    if ENABLE_ARIA2:
+                        logger.info(f"Using aria2c for parallel download...")
+                        # 1. Fetch m3u8 content
+                        async with httpx.AsyncClient(headers={"User-Agent": user_agent}) as client:
+                            r = await client.get(m3u8_url, cookies=cookies_dict, timeout=10.0)
+                            if r.status_code != 200: raise Exception("Failed to fetch m3u8")
+                            m3u8_content = r.text
+                        
+                        # 2. Extract segments
+                        base_url = m3u8_url.rsplit("/", 1)[0] + "/"
+                        lines = m3u8_content.splitlines()
+                        segments = [line for line in lines if line and not line.startswith("#")]
+                        
+                        # 3. Create aria2c input file
+                        input_file = dest_path + ".segments.txt"
+                        seg_dir = dest_path + ".segs"
+                        os.makedirs(seg_dir, exist_ok=True)
+                        
+                        with open(input_file, "w") as f:
+                            for i, seg in enumerate(segments):
+                                url = seg if seg.startswith("http") else base_url + seg
+                                # aria2c format: url \n  out=filename
+                                f.write(f"{url}\n  out={i:05d}.ts\n")
+                        
+                        # 4. Run aria2c
+                        aria_cmd = ['aria2c', '-i', input_file, '-d', seg_dir, '--header', f"Cookie: {cookie_str}", '--user-agent', user_agent, '-x', '16', '-s', '16', '-j', '16', '--summary-interval=0', '--console-log-level=error']
+                        proc = await asyncio.create_subprocess_exec(*aria_cmd)
+                        await proc.wait()
+                        
+                        # 5. Join with ffmpeg
+                        if proc.returncode == 0:
+                            # Create concat list for ffmpeg
+                            concat_file = dest_path + ".concat.txt"
+                            with open(concat_file, "w") as f:
+                                # Sort files to ensure order
+                                for seg_file in sorted(os.listdir(seg_dir)):
+                                    f.write(f"file '{os.path.abspath(os.path.join(seg_dir, seg_file))}'\n")
+                            
+                            merge_cmd = ['ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', concat_file, '-c', 'copy', raw_path]
+                            merge_proc = await asyncio.create_subprocess_exec(*merge_cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                            await merge_proc.wait()
+                            
+                            # Cleanup
+                            if os.path.exists(input_file): os.remove(input_file)
+                            if os.path.exists(concat_file): os.remove(concat_file)
+                            import shutil
+                            if os.path.exists(seg_dir): shutil.rmtree(seg_dir)
+                            
+                            if os.path.exists(raw_path):
+                                download_success = True; break
+                    
+                    # Fallback to FFmpeg if aria2c disabled or failed
                     cmd = ['ffmpeg', '-y', '-user_agent', user_agent, '-headers', f"Cookie: {cookie_str}\r\n", '-i', m3u8_url, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-progress', 'pipe:2', raw_path]
                     proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
                     
-                    # Periodic notify during raw download (Step 1)
                     while True:
                         line = await proc.stderr.readline()
                         if not line: break
-                        line_str = line.decode().strip()
-                        if progress_callback and "out_time_ms=" in line_str:
-                            # Step 1: 0-30% range based on 'fake' progress since dur might be missing
-                            # We just send a placeholder 15% to show active downloading
-                            await progress_callback(15, 0, 0)
+                        if progress_callback and "out_time_ms=" in line.decode():
+                            await progress_callback("DOWNLOAD_RAW", 15)
                     
                     await proc.wait()
                     if proc.returncode == 0 and os.path.exists(raw_path):
                         download_success = True; break
                 except Exception as e:
                     logger.warning(f"Raw Download Attempt {attempt+1} failed: {e}")
-                await asyncio.sleep(5) # Cooldown before retry
+                await asyncio.sleep(5)
             
             if not download_success: return False
 
