@@ -207,9 +207,12 @@ class ViglooBot:
 
     async def auto_scan_task(self):
         """Background task for auto mode with concurrency lock and 4h timeout"""
+        if not hasattr(self, 'failed_counts'): self.failed_counts = {}
+        
         while True:
             if self.auto_mode:
                 logger.info("Starting Auto Scan...")
+                session_failed = set() # Titles that failed in this specific scan loop
                 
                 # Scan Ranking
                 rank_data = await vigloo_api.fetch_rank()
@@ -217,16 +220,27 @@ class ViglooBot:
                     payloads = rank_data.get("data", {}).get("payloads", [])
                     for item in payloads:
                         drama_id = item.get("program", {}).get("id")
-                        if drama_id and not self.is_processed(drama_id):
+                        if drama_id and not self.is_processed(drama_id) and drama_id not in session_failed:
+                            # Skip if it failed too many times total
+                            if self.failed_counts.get(drama_id, 0) >= 3:
+                                logger.warning(f"Skipping drama {drama_id} - too many failed attempts.")
+                                continue
+                                
                             async with self.lock:
                                 try:
-                                    logger.info(f"Processing drama {drama_id} with 4h timeout...")
-                                    await asyncio.wait_for(self.run_pipeline(drama_id), timeout=4*3600)
-                                    await asyncio.sleep(10) # Cooldown after successful processing
-                                except asyncio.TimeoutError:
-                                    logger.error(f"Timeout: Drama {drama_id} took more than 4 hours.")
+                                    logger.info(f"Processing drama {drama_id} (Rank)...")
+                                    success = await asyncio.wait_for(self.run_pipeline(drama_id), timeout=4*3600)
+                                    if success:
+                                        await asyncio.sleep(10) # Cooldown
+                                    else:
+                                        session_failed.add(drama_id)
+                                        self.failed_counts[drama_id] = self.failed_counts.get(drama_id, 0) + 1
+                                        await asyncio.sleep(30) # Cool down after failure
                                 except Exception as e:
                                     logger.error(f"Pipeline failed for {drama_id}: {e}")
+                                    session_failed.add(drama_id)
+                                    self.failed_counts[drama_id] = self.failed_counts.get(drama_id, 0) + 1
+                                    await asyncio.sleep(30)
                 
                 # Scan Browse
                 browse_data = await vigloo_api.fetch_browse()
@@ -234,16 +248,27 @@ class ViglooBot:
                     payloads = browse_data.get("data", {}).get("payloads", [])
                     for item in payloads:
                         drama_id = item.get("program", {}).get("id")
-                        if drama_id and not self.is_processed(drama_id):
+                        if drama_id and not self.is_processed(drama_id) and drama_id not in session_failed:
+                            # Skip if too many failures
+                            if self.failed_counts.get(drama_id, 0) >= 3:
+                                logger.warning(f"Skipping drama {drama_id} - too many failed attempts.")
+                                continue
+                                
                             async with self.lock:
                                 try:
-                                    logger.info(f"Processing drama {drama_id} with 4h timeout...")
-                                    await asyncio.wait_for(self.run_pipeline(drama_id), timeout=4*3600)
-                                    await asyncio.sleep(10) # Cooldown after successful processing
-                                except asyncio.TimeoutError:
-                                    logger.error(f"Timeout: Drama {drama_id} took more than 4 hours.")
+                                    logger.info(f"Processing drama {drama_id} (Browse)...")
+                                    success = await asyncio.wait_for(self.run_pipeline(drama_id), timeout=4*3600)
+                                    if success:
+                                        await asyncio.sleep(10) # Cooldown
+                                    else:
+                                        session_failed.add(drama_id)
+                                        self.failed_counts[drama_id] = self.failed_counts.get(drama_id, 0) + 1
+                                        await asyncio.sleep(30)
                                 except Exception as e:
                                     logger.error(f"Pipeline failed for {drama_id}: {e}")
+                                    session_failed.add(drama_id)
+                                    self.failed_counts[drama_id] = self.failed_counts.get(drama_id, 0) + 1
+                                    await asyncio.sleep(30)
                 
             await asyncio.sleep(AUTO_SCAN_INTERVAL)
 
