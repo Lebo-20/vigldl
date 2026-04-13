@@ -169,7 +169,11 @@ class ViglooBot:
                         return file_path
                     return None
 
-                tasks = [process_one_episode(i, ep) for i, ep in enumerate(episodes, 1)]
+                tasks = []
+                for i, ep in enumerate(episodes, 1):
+                    tasks.append(process_one_episode(i, ep))
+                    await asyncio.sleep(5) # Stagger episode start (5s) as requested
+                
                 downloaded_files_results = await asyncio.gather(*tasks)
                 downloaded_files = [f for f in downloaded_files_results if f]
                 
